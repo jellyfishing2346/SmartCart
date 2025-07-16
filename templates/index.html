@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartCart Stock Predictor</title>
+    <link href="https://fonts.googleapis.com/css?family=Montserrat:700,400&display=swap" rel="stylesheet">
+    <style>
+        .error-message {
+            color: #fff !important;
+            background: linear-gradient(90deg, #F75C03 60%, #232a34 100%) !important;
+            border: 2px solid #F75C03;
+            font-weight: bold;
+            margin-top: 32px;
+            margin-bottom: 0;
+            padding: 18px 12px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px #F75C0340;
+            font-size: 1.08em;
+            letter-spacing: 0.01em;
+        }
+        body { background: #181c24; color: #fff; font-family: 'Montserrat', sans-serif; margin: 0; }
+        .container { max-width: 500px; margin: 40px auto; background: #232a34; border-radius: 16px; box-shadow: 0 4px 24px #0003; padding: 24px; }
+        h1 { color: #4F8EF7; text-align: center; font-size: 2em; }
+        label { color: #F7B32B; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; margin: 10px 0 20px; border-radius: 8px; border: none; font-size: 1em; }
+        button { background: linear-gradient(90deg, #4F8EF7, #21CE99); color: #fff; border: none; padding: 12px 0; width: 100%; border-radius: 8px; font-size: 1.1em; font-weight: bold; cursor: pointer; transition: background 0.3s; }
+        button:hover { background: linear-gradient(90deg, #21CE99, #4F8EF7); }
+        .result { background: #181c24; color: #21CE99; border-radius: 8px; padding: 16px; margin-top: 24px; font-size: 1.1em; text-align: center; word-break: break-word; }
+        #chart { max-width: 100%; height: auto !important; }
+        @media (max-width: 600px) {
+            .container { max-width: 98vw; margin: 10px auto; padding: 10px; border-radius: 8px; }
+            h1 { font-size: 1.3em; }
+            .result { font-size: 1em; padding: 10px; }
+            #chart { max-width: 98vw; }
+            button, input, select { font-size: 1em; padding: 8px; }
+        }
+        @media (max-width: 400px) {
+            h1 { font-size: 1em; }
+            .result { font-size: 0.95em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 SmartCart</h1>
+        <form id="predict-form">
+            <label for="ticker">Stock Ticker Symbol(s)</label>
+            <input type="text" id="ticker" name="ticker" placeholder="e.g. AAPL, MSFT, TSLA" required>
+            <label for="days">Days to Predict</label>
+            <input type="number" id="days" name="days" min="1" max="30" value="7" required>
+            <button type="submit">Predict</button>
+            <div style="color:#aaa; font-size:0.95em; margin-top:6px; margin-bottom:12px;">
+                Enter one or more tickers separated by commas.<br>
+                <span style="color:#F7B32B">Examples: <b>AAPL</b> (Apple), <b>MSFT</b> (Microsoft), <b>TSLA</b> (Tesla)</span><br>
+                <span style="font-size:0.92em; color:#888;">Tip: Ticker symbols are usually 1-5 uppercase letters. <a href="https://finance.yahoo.com/lookup" target="_blank" style="color:#4F8EF7; text-decoration:underline;">Find tickers</a></span>
+            </div>
+        </form>
+        <div id="result" class="result" style="display:none;"></div>
+        <div style="margin-top:24px; width:100%; overflow-x:auto;">
+            <canvas id="chart" style="display:none; background:#fff; border-radius:8px; max-width:100%;"></canvas>
+        </div>
+        <div id="legend" style="text-align:center; margin-top:8px; color:#aaa; font-size:0.95em; word-break:break-word;"></div>
+        <div style="text-align:center; margin-top:12px;">
+            <button id="download-csv" style="display:none; background:#21CE99; color:#fff; border:none; padding:8px 18px; border-radius:6px; font-size:1em; font-weight:bold; cursor:pointer;">Download Predictions (CSV)</button>
+        </div>
+        <div id="error" class="result error-message" style="display:none;"></div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let chart = null;
+        let lastResults = {};
+        document.getElementById('predict-form').onsubmit = async function(e) {
+            e.preventDefault();
+            const ticker = document.getElementById('ticker').value;
+            const days = document.getElementById('days').value;
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('chart').style.display = 'none';
+            document.getElementById('legend').innerHTML = '';
+            document.getElementById('download-csv').style.display = 'none';
+            const res = await fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `ticker=${ticker}&days=${days}`
+            });
+            const data = await res.json();
+            let hasSuccess = false;
+            if (data.results) {
+                lastResults = data.results;
+                let resultHtml = '';
+                let errorHtml = '';
+                let datasets = [];
+                let labels = [];
+                let maxPredLen = 0;
+                let maxHistLen = 0;
+                // Find max lengths for labels
+                for (const t in data.results) {
+                    if (data.results[t].predictions) {
+                        maxPredLen = Math.max(maxPredLen, data.results[t].predictions.length);
+                    }
+                    if (data.results[t].history) {
+                        maxHistLen = Math.max(maxHistLen, data.results[t].history.length);
+                    }
+                }
+                for (let i = 0; i < maxHistLen; i++) labels.push(`Day -${maxHistLen-i}`);
+                for (let i = 1; i <= maxPredLen; i++) labels.push(`Day +${i}`);
+                let colorIdx = 0;
+                const colors = ['#4F8EF7', '#21CE99', '#F7B32B', '#F75C03', '#aaa', '#9D4EDD'];
+                for (const ticker in data.results) {
+                    const res = data.results[ticker];
+                    if (res.error) {
+                        errorHtml += `<b>${ticker}:</b> ${res.error}<br>`;
+                        continue;
+                    }
+                    hasSuccess = true;
+                    resultHtml += `<b>${ticker} Predicted:</b> ${res.predictions.map(p => p.toFixed(2)).join(' | ')}`;
+                    if (res.metrics && (res.metrics.rmse !== undefined || res.metrics.mae !== undefined)) {
+                        resultHtml += `<br><span style='color:#F7B32B'>RMSE: ${res.metrics.rmse !== undefined ? res.metrics.rmse.toFixed(2) : 'N/A'}, MAE: ${res.metrics.mae !== undefined ? res.metrics.mae.toFixed(2) : 'N/A'}</span>`;
+                    }
+                    resultHtml += '<br>';
+                    // Historical dataset
+                    if (res.history && res.history.length > 0) {
+                        datasets.push({
+                            label: `${ticker} Historical`,
+                            data: res.history,
+                            borderColor: '#aaa',
+                            backgroundColor: 'rgba(200,200,200,0.1)',
+                            tension: 0.2,
+                            pointRadius: 2,
+                            pointBackgroundColor: '#aaa',
+                            fill: false
+                        });
+                    }
+                    // Prediction dataset
+                    datasets.push({
+                        label: `${ticker} Predicted`,
+                        data: res.predictions,
+                        borderColor: colors[colorIdx % colors.length],
+                        backgroundColor: 'rgba(79,142,247,0.1)',
+                        tension: 0.2,
+                        pointRadius: 4,
+                        pointBackgroundColor: colors[colorIdx % colors.length],
+                        fill: true
+                    });
+                    colorIdx++;
+                }
+                if (resultHtml) {
+                    document.getElementById('result').style.display = 'block';
+                    document.getElementById('result').innerHTML = resultHtml;
+                }
+                if (errorHtml) {
+                    document.getElementById('error').style.display = 'block';
+                    document.getElementById('error').innerHTML = errorHtml;
+                }
+                if (hasSuccess && datasets.length > 0) {
+                    const ctx = document.getElementById('chart').getContext('2d');
+                    document.getElementById('chart').style.display = 'block';
+                    if (chart) chart.destroy();
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: datasets
+                        },
+                        options: {
+                            plugins: { legend: { display: true } },
+                            scales: {
+                                x: { title: { display: true, text: 'Day' } },
+                                y: { title: { display: true, text: 'Price ($)' } }
+                            }
+                        }
+                    });
+                    document.getElementById('legend').innerHTML = '<span style="color:#aaa">Gray = historical, Color = predicted</span>';
+                    document.getElementById('download-csv').style.display = 'inline-block';
+                }
+            } else if (data.error) {
+                document.getElementById('download-csv').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').innerHTML = `<b>Error:</b> ${data.error}`;
+            }
+        };
+
+        document.getElementById('download-csv').onclick = function() {
+            if (!lastResults || Object.keys(lastResults).length === 0) return;
+            let csv = 'Ticker,Day,Predicted Price\n';
+            for (const ticker in lastResults) {
+                const res = lastResults[ticker];
+                if (res.predictions) {
+                    res.predictions.forEach((p, i) => {
+                        csv += `${ticker},${i+1},${p}\n`;
+                    });
+                }
+            }
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'predictions.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+    </script>
+</body>
+</html>

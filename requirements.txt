@@ -1,0 +1,9 @@
+# SmartCart - Stock Forecasting
+
+numpy
+pandas
+scikit-learn
+tensorflow
+yfinance
+flask
+Flask-Login
