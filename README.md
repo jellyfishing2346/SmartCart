@@ -66,6 +66,9 @@ python app.py
 ```
 
 Then open your browser and go to [http://localhost:5050](http://localhost:5050) (or the port you choose) to use the web UI for predictions.
+#### Live Demo
+You can try SmartCart instantly on Render:
+[https://smartcart-xuqj.onrender.com](https://smartcart-xuqj.onrender.com)
 
 #### Docker (Optional)
 You can also run SmartCart using Docker:
