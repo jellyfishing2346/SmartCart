@@ -3,9 +3,8 @@ from flask import Flask, request, jsonify, render_template
 import os
 import numpy as np
 import pandas as pd
-from flask import redirect, url_for, flash, session
+from flask import redirect, url_for, flash, session, Flask
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask import Flask
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Replace with a secure key in production
@@ -125,16 +124,3 @@ def predict():
             results[ticker] = {'error': f'Failed: {str(e)}'}
     return jsonify({'results': results})
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-import sys
-
-if __name__ == "__main__":
-    port = 5000
-    # Allow port override via command line argument: python3 app.py --port=XXXX
-    if len(sys.argv) > 2 and sys.argv[1] == "--port":
-        try:
-            port = int(sys.argv[2])
-        except ValueError:
-            print("Invalid port specified. Using default port 5000.")
-    app.run(host="0.0.0.0", port=8080, debug=True)
