@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from flask import redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask import Flask
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Replace with a secure key in production
